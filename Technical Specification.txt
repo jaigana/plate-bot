@@ -1,0 +1,729 @@
+# Документ №2: Техническая спецификация платформы CPM2 Plates Market
+
+# 1. Структура базы данных
+
+## Таблица users
+
+```text
+id BIGSERIAL PK
+
+telegram_id BIGINT UNIQUE
+username VARCHAR(64)
+telegram_name VARCHAR(255)
+
+balance_available INTEGER
+balance_frozen INTEGER
+
+is_admin BOOLEAN
+is_blocked BOOLEAN
+
+registered_at TIMESTAMP
+last_activity TIMESTAMP
+
+last_screen VARCHAR(64)
+
+created_at TIMESTAMP
+updated_at TIMESTAMP
+```
+
+---
+
+## Таблица plates
+
+```text
+id BIGSERIAL PK
+
+plate_number VARCHAR(20) UNIQUE
+country_code VARCHAR(8)
+
+owner_id BIGINT FK users.id
+
+status VARCHAR(32)
+
+created_by_state BOOLEAN
+
+reserved_by BIGINT NULL
+reserved_until TIMESTAMP NULL
+
+created_at TIMESTAMP
+updated_at TIMESTAMP
+```
+
+---
+
+## Таблица sales
+
+```text
+id BIGSERIAL PK
+
+plate_id BIGINT FK plates.id
+
+seller_id BIGINT FK users.id
+buyer_id BIGINT FK users.id
+
+price INTEGER
+
+commission INTEGER
+
+status VARCHAR(32)
+
+created_at TIMESTAMP
+completed_at TIMESTAMP
+```
+
+---
+
+## Таблица auctions
+
+```text
+id BIGSERIAL PK
+
+plate_id BIGINT FK plates.id
+
+seller_id BIGINT FK users.id
+
+start_price INTEGER
+current_price INTEGER
+
+highest_bidder_id BIGINT NULL
+
+started_at TIMESTAMP
+ends_at TIMESTAMP
+
+is_finished BOOLEAN
+is_cancelled BOOLEAN
+
+created_at TIMESTAMP
+updated_at TIMESTAMP
+```
+
+---
+
+## Таблица bids
+
+```text
+id BIGSERIAL PK
+
+auction_id BIGINT FK auctions.id
+
+bidder_id BIGINT FK users.id
+
+amount INTEGER
+
+created_at TIMESTAMP
+```
+
+---
+
+## Таблица transactions
+
+```text
+id BIGSERIAL PK
+
+user_id BIGINT FK users.id
+
+type VARCHAR(64)
+
+amount INTEGER
+
+balance_before INTEGER
+balance_after INTEGER
+
+reference_type VARCHAR(64)
+reference_id BIGINT
+
+created_at TIMESTAMP
+```
+
+---
+
+## Таблица ownership_history
+
+```text
+id BIGSERIAL PK
+
+plate_id BIGINT FK plates.id
+
+old_owner_id BIGINT
+new_owner_id BIGINT
+
+operation_type VARCHAR(64)
+
+price INTEGER
+
+created_at TIMESTAMP
+```
+
+---
+
+## Таблица blacklisted_series
+
+```text
+id BIGSERIAL PK
+
+country_code VARCHAR(8)
+
+series VARCHAR(16)
+
+created_at TIMESTAMP
+created_by BIGINT
+```
+
+---
+
+## Таблица platform_settings
+
+```text
+key VARCHAR(128) PK
+
+value TEXT
+
+updated_at TIMESTAMP
+updated_by BIGINT
+```
+
+---
+
+## Таблица bot_cards
+
+```text
+card_id VARCHAR(64) PK
+
+title TEXT
+description TEXT
+
+image_file_id TEXT
+
+enabled BOOLEAN
+
+updated_by BIGINT
+updated_at TIMESTAMP
+```
+
+---
+
+## Таблица banners
+
+```text
+id BIGSERIAL PK
+
+title TEXT
+description TEXT
+
+image_file_id TEXT
+
+start_at TIMESTAMP
+end_at TIMESTAMP
+
+priority INTEGER
+
+enabled BOOLEAN
+```
+
+---
+
+## Таблица notifications
+
+```text
+id BIGSERIAL PK
+
+user_id BIGINT
+
+type VARCHAR(64)
+
+payload JSONB
+
+is_sent BOOLEAN
+
+created_at TIMESTAMP
+sent_at TIMESTAMP
+```
+
+---
+
+## Таблица audit_logs
+
+```text
+id BIGSERIAL PK
+
+admin_id BIGINT
+
+action_type VARCHAR(128)
+
+entity_type VARCHAR(64)
+
+entity_id BIGINT
+
+payload JSONB
+
+created_at TIMESTAMP
+```
+
+---
+
+# 2. Callback Data
+
+Формат:
+
+```text
+module:action:entity_id
+```
+
+Примеры:
+
+```text
+market:open
+market:country:ru
+market:country:kz
+
+plate:view:123
+
+sale:create:123
+sale:buy:123
+
+auction:view:123
+auction:bid:123
+auction:history:123
+
+balance:topup
+balance:history
+
+profile:view
+
+admin:user:123
+admin:plate:123
+admin:auction:123
+
+nav:back
+nav:home
+```
+
+Максимальная длина callback_data:
+
+```text
+64 байта
+```
+
+---
+
+# 3. Экранная модель
+
+## Пользовательские экраны
+
+```text
+HOME
+
+SEARCH
+SEARCH_RESULTS
+
+MARKET
+
+MARKET_RU
+MARKET_KZ
+
+PLATE_VIEW
+
+MY_PLATES
+MY_PLATE_VIEW
+
+CREATE_SALE
+
+CREATE_AUCTION
+
+AUCTIONS
+AUCTION_VIEW
+AUCTION_HISTORY
+
+BALANCE
+BALANCE_TOPUP
+
+PROFILE
+
+HELP
+
+LEGAL
+```
+
+---
+
+## Административные экраны
+
+```text
+ADMIN_HOME
+
+ADMIN_STATS
+
+ADMIN_USERS
+ADMIN_USER_VIEW
+
+ADMIN_PLATES
+ADMIN_PLATE_VIEW
+
+ADMIN_AUCTIONS
+ADMIN_AUCTION_VIEW
+
+ADMIN_FINANCE
+
+ADMIN_BLACKLISTS
+
+ADMIN_CARDS
+
+ADMIN_SETTINGS
+
+ADMIN_BACKUPS
+```
+
+---
+
+# 4. Навигационный стек
+
+Для каждого пользователя хранить:
+
+```text
+screen_stack JSONB
+```
+
+Пример:
+
+```json
+[
+  "HOME",
+  "MARKET",
+  "MARKET_RU",
+  "PLATE_VIEW:123"
+]
+```
+
+При нажатии:
+
+```text
+⬅ Назад
+```
+
+выполняется:
+
+```text
+stack.pop()
+```
+
+и открывается предыдущий экран.
+
+---
+
+# 5. Последовательность покупки у Государства
+
+```text
+Пользователь вводит номер
+
+↓
+
+Проверка БД
+
+↓
+
+Номер отсутствует
+
+↓
+
+Создать резерв
+
+↓
+
+Создать инвойс Telegram Stars
+
+↓
+
+Ожидание оплаты
+
+↓
+
+Создать номер
+
+↓
+
+Передать владельцу
+
+↓
+
+Снять резерв
+
+↓
+
+Записать историю владения
+```
+
+---
+
+# 6. Последовательность продажи
+
+```text
+Владелец открывает номер
+
+↓
+
+Нажимает Продать
+
+↓
+
+Указывает цену
+
+↓
+
+Подтверждает продажу
+
+↓
+
+Статус FIXED_SALE
+```
+
+---
+
+# 7. Последовательность покупки у игрока
+
+```text
+Покупатель открывает номер
+
+↓
+
+Нажимает Купить
+
+↓
+
+Создается резерв
+
+↓
+
+Создается инвойс
+
+↓
+
+Ожидание оплаты
+
+↓
+
+10% государству
+
+↓
+
+90% продавцу
+
+↓
+
+Передача номера
+
+↓
+
+Запись истории владения
+```
+
+---
+
+# 8. Последовательность аукциона
+
+```text
+Создание аукциона
+
+↓
+
+Поступление ставки
+
+↓
+
+Заморозка средств
+
+↓
+
+Перебитие ставки
+
+↓
+
+Разморозка предыдущего лидера
+
+↓
+
+Окончание аукциона
+
+↓
+
+Передача номера
+
+↓
+
+Распределение средств
+
+↓
+
+История владения
+```
+
+---
+
+# 9. Планировщики APScheduler
+
+Каждую минуту:
+
+```text
+истекшие резервы
+окончание аукционов
+anti-sniping
+```
+
+Каждый час:
+
+```text
+неотправленные уведомления
+```
+
+Каждый день:
+
+```text
+поиск неактивных пользователей
+создание резервной копии
+```
+
+---
+
+# 10. Push-уведомления
+
+Типы:
+
+```text
+AUCTION_WON
+
+AUCTION_OUTBID
+
+AUCTION_FINISHED
+
+SALE_COMPLETED
+
+PLATE_PURCHASED
+
+BALANCE_TOPUP
+
+ACCOUNT_INACTIVE_WARNING
+```
+
+---
+
+# 11. Состояния FSM
+
+```text
+WAIT_SEARCH_QUERY
+
+WAIT_TOPUP_AMOUNT
+
+WAIT_PLATE_INPUT
+
+WAIT_SALE_PRICE
+
+WAIT_AUCTION_START_PRICE
+
+WAIT_AUCTION_DURATION
+
+WAIT_ADMIN_CARD_TEXT
+
+WAIT_ADMIN_CARD_IMAGE
+
+WAIT_ADMIN_BLACKLIST_SERIES
+```
+
+---
+
+# 12. Настройки платформы
+
+```text
+commission_percent
+
+state_plate_price
+
+auction_min_increment
+
+auction_max_duration_hours
+
+auction_sniping_minutes
+
+reserve_duration_minutes
+
+inactive_days
+
+max_sale_price
+```
+
+---
+
+# 13. Блокировки и конкурентный доступ
+
+Использовать:
+
+```text
+SELECT FOR UPDATE
+```
+
+для:
+
+* покупки номера;
+* покупки у государства;
+* ставок аукциона;
+* завершения аукциона;
+* резервирования.
+
+---
+
+# 14. Структура проекта
+
+```text
+app/
+
+bot/
+
+handlers/
+
+middlewares/
+
+filters/
+
+services/
+
+repositories/
+
+models/
+
+schemas/
+
+validators/
+
+tasks/
+
+utils/
+
+config/
+
+migrations/
+
+tests/
+```
+
+---
+
+# 15. Принцип интерфейса
+
+Почти все действия выполняются через:
+
+```text
+editMessageText()
+
+editMessageMedia()
+
+editMessageReplyMarkup()
+```
+
+Бот должен визуально восприниматься как мобильное приложение внутри Telegram.
+
+Новые сообщения создаются только для:
+
+* уведомлений;
+* инвойсов;
+* временного ввода пользователя.
+
+```
+```
