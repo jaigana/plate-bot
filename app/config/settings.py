@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from functools import lru_cache
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -30,10 +31,27 @@ class Settings(BaseSettings):
 
     @field_validator("admin_telegram_ids", mode="before")
     @classmethod
-    def parse_admin_ids(cls, value: str | list[int] | set[int]) -> frozenset[int]:
+    def parse_admin_ids(cls, value: object) -> frozenset[int]:
         if isinstance(value, str):
-            return frozenset(int(item.strip()) for item in value.split(",") if item.strip())
-        return frozenset(value)
+            values: Iterable[object] = (item.strip() for item in value.split(",") if item.strip())
+        elif isinstance(value, int) and not isinstance(value, bool):
+            values = (value,)
+        elif isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray)):
+            values = value
+        else:
+            raise ValueError("ADMIN_TELEGRAM_IDS must be an ID, CSV string, or JSON array")
+        admin_ids: set[int] = set()
+        for item in values:
+            if isinstance(item, bool):
+                raise ValueError("ADMIN_TELEGRAM_IDS must contain numeric Telegram IDs")
+            try:
+                telegram_id = int(item)
+            except (TypeError, ValueError) as error:
+                raise ValueError("ADMIN_TELEGRAM_IDS must contain numeric Telegram IDs") from error
+            if telegram_id <= 0:
+                raise ValueError("ADMIN_TELEGRAM_IDS must contain positive Telegram IDs")
+            admin_ids.add(telegram_id)
+        return frozenset(admin_ids)
 
     @field_validator("database_schema")
     @classmethod

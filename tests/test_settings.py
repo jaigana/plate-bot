@@ -23,6 +23,21 @@ def test_empty_webhook_environment_values_select_polling_mode() -> None:
     assert settings.async_database_url == "postgresql+asyncpg://user:password@localhost:5432/plates"
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (123456789, frozenset({123456789})),
+        ("123456789", frozenset({123456789})),
+        ("123456789, 987654321", frozenset({123456789, 987654321})),
+        ([123456789, 987654321], frozenset({123456789, 987654321})),
+    ],
+)
+def test_admin_ids_support_single_ids_csv_and_collections(
+    value: object, expected: frozenset[int]
+) -> None:
+    assert _settings(admin_telegram_ids=value).admin_telegram_ids == expected
+
+
 def test_webhook_endpoint_uses_public_https_origin_and_path() -> None:
     settings = _settings(
         webhook_url="https://bot.example.com/base/",
@@ -42,3 +57,5 @@ def test_webhook_requires_https_and_a_safe_secret() -> None:
         _settings(database_schema="cpm2-prod")
     with pytest.raises(PydanticValidationError):
         _settings(database_schema="CPM2")
+    with pytest.raises(PydanticValidationError):
+        _settings(admin_telegram_ids=0)
