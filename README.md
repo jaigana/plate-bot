@@ -28,10 +28,12 @@ For a local Python environment, install `pip install -e '.[dev]'`, start Postgre
 ## Railway
 
 Deploy one service from this repository and attach Railway PostgreSQL and Redis. Set
-`BOT_TOKEN`, `DATABASE_URL`, `REDIS_URL`, `ADMIN_TELEGRAM_IDS`, `WEBHOOK_URL` (the public
-HTTPS URL of the bot service), and a random `WEBHOOK_SECRET`. Railway provides `PORT`
-automatically; it is used when `WEBHOOK_PORT` is not set. The container applies migrations
-before starting the webhook server.
+`BOT_TOKEN`, `DATABASE_URL`, `REDIS_URL`, and `ADMIN_TELEGRAM_IDS`. The simplest Railway
+configuration is polling: leave `WEBHOOK_URL` and `WEBHOOK_SECRET` empty. If using a webhook,
+set `WEBHOOK_URL` to the public Railway domain; both `https://my-bot.up.railway.app` and the
+bare `my-bot.up.railway.app` are accepted. Do not use Railway's private/internal `http://`
+address — Telegram cannot call it. Railway provides `PORT` automatically; it is used when
+`WEBHOOK_PORT` is not set. The container applies migrations before starting the bot.
 
 For the group phrase **«мой номер»** to reach the bot, disable group privacy in BotFather:
 `/setprivacy` → select the bot → `Disable`. Telegram otherwise delivers only commands to bots

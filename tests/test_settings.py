@@ -27,6 +27,12 @@ def test_railway_port_is_used_when_webhook_port_is_not_set() -> None:
     assert _settings(PORT=9090).webhook_port == 9090
 
 
+def test_railway_public_domain_is_normalized_to_https() -> None:
+    assert _settings(webhook_url="plates-production.up.railway.app").webhook_url == (
+        "https://plates-production.up.railway.app"
+    )
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [

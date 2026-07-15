@@ -62,11 +62,25 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_SCHEMA must be a lowercase ASCII PostgreSQL identifier")
         return value
 
-    @field_validator("webhook_url", "webhook_secret", mode="before")
+    @field_validator("webhook_secret", mode="before")
     @classmethod
     def empty_webhook_values_are_unset(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
+        return value
+
+    @field_validator("webhook_url", mode="before")
+    @classmethod
+    def normalize_webhook_url(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        value = value.strip()
+        if not value:
+            return None
+        # Railway's public-domain variable is commonly just
+        # `service-production-xxxx.up.railway.app`; Telegram needs HTTPS.
+        if "://" not in value:
+            return f"https://{value}"
         return value
 
     @model_validator(mode="after")
