@@ -12,5 +12,4 @@ RUN pip install --upgrade pip && pip install .
 COPY alembic.ini ./
 COPY migrations ./migrations
 
-CMD ["python", "-m", "app.main"]
-
+CMD ["sh", "-c", "alembic upgrade head && python -m app.main"]

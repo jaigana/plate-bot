@@ -492,6 +492,7 @@ class AdminService:
             plate.status = PlateStatus.STATE_SALE.value
             plate.reserved_by = None
             plate.reserved_until = None
+            await self._users.clear_primary_plate(session, plate.id)
             session.add(
                 OwnershipHistory(
                     plate_id=plate.id,
@@ -520,6 +521,7 @@ class AdminService:
             plate.status = PlateStatus.OWNED.value
             plate.reserved_by = None
             plate.reserved_until = None
+            await self._users.clear_primary_plate(session, plate.id)
             session.add(
                 OwnershipHistory(
                     plate_id=plate.id,
@@ -607,6 +609,7 @@ class AdminService:
                     plate.status = PlateStatus.STATE_SALE.value
                     plate.reserved_by = None
                     plate.reserved_until = None
+                    await self._users.clear_primary_plate(session, plate.id)
                     session.add(
                         OwnershipHistory(
                             plate_id=plate.id,

@@ -105,6 +105,11 @@ class UserRepository:
             user.app_message_id = message_id
             user.app_image_file_id = image_file_id
 
+    async def clear_primary_plate(self, session: AsyncSession, plate_id: int) -> None:
+        await session.execute(
+            update(User).where(User.primary_plate_id == plate_id).values(primary_plate_id=None)
+        )
+
 
 class PlateRepository:
     async def get(

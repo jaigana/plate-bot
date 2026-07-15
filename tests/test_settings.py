@@ -23,6 +23,10 @@ def test_empty_webhook_environment_values_select_polling_mode() -> None:
     assert settings.async_database_url == "postgresql+asyncpg://user:password@localhost:5432/plates"
 
 
+def test_railway_port_is_used_when_webhook_port_is_not_set() -> None:
+    assert _settings(PORT=9090).webhook_port == 9090
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [

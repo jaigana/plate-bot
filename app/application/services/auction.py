@@ -222,6 +222,7 @@ class AuctionService:
             previous_owner = plate.owner_id
             plate.owner_id = winner.id
             plate.status = PlateStatus.OWNED.value
+            await self._users.clear_primary_plate(session, plate.id)
             session.add(
                 OwnershipHistory(
                     plate_id=plate.id,

@@ -8,7 +8,6 @@ from app.application.services.marketplace import MarketplaceService
 from app.application.services.navigation import NavigationService
 from app.config.settings import Settings
 from app.infrastructure.db.session import Database, UnitOfWork
-from app.infrastructure.storage import ImageStorage
 
 
 @dataclass(slots=True)
@@ -21,7 +20,6 @@ class Container:
     admin: AdminService
     navigation: NavigationService
     backups: BackupService
-    images: ImageStorage
 
     async def close(self) -> None:
         await self.database.close()
@@ -40,5 +38,4 @@ def build_container(settings: Settings) -> Container:
         admin=AdminService(uow, auctions),
         navigation=NavigationService(uow),
         backups=BackupService(uow, settings.async_database_url, Path("backups")),
-        images=ImageStorage(settings),
     )

@@ -15,6 +15,9 @@ if config.config_file_name is not None:
 
 database_url = os.getenv("DATABASE_URL")
 if database_url:
+    database_url = database_url.replace("postgres://", "postgresql+asyncpg://").replace(
+        "postgresql://", "postgresql+asyncpg://"
+    )
     config.set_main_option("sqlalchemy.url", database_url)
 database_schema = os.getenv("DATABASE_SCHEMA", "cpm2")
 if not re.fullmatch(r"[a-z_][a-z0-9_]*", database_schema):

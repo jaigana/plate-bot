@@ -127,6 +127,47 @@ class MarketplaceService:
                 raise NotFoundError("Пользователь не найден.")
             return await self._plates.by_owner(session, user.id, page.offset, page.limit)
 
+    async def profile(self, telegram_id: int) -> tuple[User, Plate | None]:
+        """Return the user's display profile and repair a stale primary plate, if any."""
+        async with self._uow.transaction() as session:
+            user = await self._users.get_by_telegram_id(session, telegram_id, lock=True)
+            if user is None:
+                raise NotFoundError("Сначала откройте бота командой /start.")
+            if user.primary_plate_id is None:
+                return user, None
+            plate = await self._plates.get(session, user.primary_plate_id)
+            if plate is None or plate.owner_id != user.id or plate.status != PlateStatus.OWNED.value:
+                user.primary_plate_id = None
+                return user, None
+            return user, plate
+
+    async def available_primary_plates(self, telegram_id: int) -> list[Plate]:
+        """Only owned, non-listed plates can be displayed as the public primary plate."""
+        async with self._uow.transaction() as session:
+            user = await self._users.get_by_telegram_id(session, telegram_id)
+            if user is None:
+                raise NotFoundError("Пользователь не найден.")
+            plates = await self._plates.by_owner(session, user.id, 0, 50)
+            return [plate for plate in plates if plate.status == PlateStatus.OWNED.value]
+
+    async def set_primary_plate(self, telegram_id: int, plate_id: int) -> Plate:
+        async with self._uow.transaction() as session:
+            user = await self._users.get_by_telegram_id(session, telegram_id, lock=True)
+            plate = await self._plates.get(session, plate_id, lock=True)
+            if user is None or plate is None:
+                raise NotFoundError("Номер не найден.")
+            if plate.owner_id != user.id or plate.status != PlateStatus.OWNED.value:
+                raise ValidationError("Основным можно выбрать только свой доступный номер.")
+            user.primary_plate_id = plate.id
+            return plate
+
+    async def set_cover_photo(self, telegram_id: int, file_id: str) -> None:
+        async with self._uow.transaction() as session:
+            user = await self._users.get_by_telegram_id(session, telegram_id, lock=True)
+            if user is None:
+                raise NotFoundError("Пользователь не найден.")
+            user.cover_photo_file_id = file_id
+
     async def search(
         self, country_code: str, raw_query: str, page: Page
     ) -> tuple[str, list[Plate]]:
@@ -540,6 +581,7 @@ class MarketplaceService:
         plate.status = PlateStatus.OWNED.value
         plate.reserved_by = None
         plate.reserved_until = None
+        await self._users.clear_primary_plate(session, plate.id)
         sale.status = SaleStatus.COMPLETED.value
         sale.buyer_id = buyer.id
         sale.completed_at = utcnow()

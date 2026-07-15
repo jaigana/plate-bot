@@ -3,31 +3,33 @@ from __future__ import annotations
 from collections.abc import Iterable
 from functools import lru_cache
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", populate_by_name=True
+    )
 
     bot_token: SecretStr
     database_url: str
     database_schema: str = "cpm2"
     redis_url: str
     admin_telegram_ids: frozenset[int] = Field(default_factory=frozenset)
-    owner_telegram_id: int
+    owner_telegram_id: int | None = None
     log_level: str = "INFO"
     webhook_url: str | None = None
     webhook_path: str = "/webhook"
     webhook_secret: SecretStr | None = None
     webhook_host: str = "0.0.0.0"
-    webhook_port: int = Field(default=8080, ge=1, le=65535)
-    scheduler_enabled: bool = True
-    s3_endpoint_url: str | None = None
-    s3_bucket: str | None = None
-    s3_access_key: SecretStr | None = None
-    s3_secret_key: SecretStr | None = None
-    s3_public_base_url: str | None = None
+    webhook_port: int = Field(
+        default=8080,
+        ge=1,
+        le=65535,
+        validation_alias=AliasChoices("WEBHOOK_PORT", "PORT"),
+    )
+    scheduler_enabled: bool = False
 
     @field_validator("admin_telegram_ids", mode="before")
     @classmethod

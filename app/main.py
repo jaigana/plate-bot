@@ -25,7 +25,12 @@ async def run() -> None:
     )
     dispatcher = Dispatcher(storage=storage)
     dispatcher["container"] = container
-    dispatcher.update.outer_middleware(UserRegistrationMiddleware())
+    # `Update` objects do not expose `from_user`.  Register on the observers that
+    # carry the actual Telegram event, otherwise a first `/start` reaches its
+    # handler before the user exists in PostgreSQL.
+    dispatcher.message.outer_middleware(UserRegistrationMiddleware())
+    dispatcher.callback_query.outer_middleware(UserRegistrationMiddleware())
+    dispatcher.pre_checkout_query.outer_middleware(UserRegistrationMiddleware())
     dispatcher.include_router(router)
     scheduler = build_scheduler(container, bot) if settings.scheduler_enabled else None
     if scheduler is not None:

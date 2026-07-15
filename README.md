@@ -4,7 +4,7 @@ Production-oriented Telegram marketplace for **digital in-game Car Parking Multi
 
 ## Run locally
 
-1. Copy `.env.example` to `.env` and set `BOT_TOKEN`, `ADMIN_TELEGRAM_IDS`, and `OWNER_TELEGRAM_ID`.
+1. Copy `.env.example` to `.env` and set `BOT_TOKEN` and `ADMIN_TELEGRAM_IDS`.
 2. Start the stack: `docker compose up --build`.
 3. The bot applies Alembic migrations before polling.
 
@@ -17,12 +17,27 @@ For a local Python environment, install `pip install -e '.[dev]'`, start Postgre
 
 ## Production notes
 
-- Run exactly one scheduler instance (`SCHEDULER_ENABLED=true`, the default) when horizontally scaling polling workers.
+- The primary-number bot needs no scheduler. Set `SCHEDULER_ENABLED=true` only if you keep using
+  the legacy marketplace auctions and payment-expiry jobs; run exactly one such instance.
 - Use Telegram webhook mode behind HTTPS for Railway or other multi-instance deployments.
 - PostgreSQL is the source of truth. Redis is used only for FSM and UI cache, so losing Redis does not alter balances or asset ownership.
 - All CPM2 tables live in the `cpm2` PostgreSQL schema by default. This prevents collisions with
   generic tables such as `users` in a shared database; override it only through `DATABASE_SCHEMA`.
 - Backups use `pg_dump`; the process image includes the PostgreSQL client.
+
+## Railway
+
+Deploy one service from this repository and attach Railway PostgreSQL and Redis. Set
+`BOT_TOKEN`, `DATABASE_URL`, `REDIS_URL`, `ADMIN_TELEGRAM_IDS`, `WEBHOOK_URL` (the public
+HTTPS URL of the bot service), and a random `WEBHOOK_SECRET`. Railway provides `PORT`
+automatically; it is used when `WEBHOOK_PORT` is not set. The container applies migrations
+before starting the webhook server.
+
+For the group phrase **«мой номер»** to reach the bot, disable group privacy in BotFather:
+`/setprivacy` → select the bot → `Disable`. Telegram otherwise delivers only commands to bots
+in groups. A user opens the bot privately, selects one owned, non-listed number as primary, and
+may send a photo there. PostgreSQL stores the selected plate and Telegram's `file_id`; the photo
+is re-sent by Telegram, so no S3 or other media storage is used.
 
 ## Architecture
 

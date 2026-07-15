@@ -25,12 +25,13 @@ def _guard(name: str, task: Callable[[], Awaitable[object]]) -> Callable[[], Awa
 def build_scheduler(container: Container, bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
     notifications = NotificationService(container.uow, bot)
+    owner_telegram_id = container.settings.owner_telegram_id
 
     async def backup() -> str:
         item = await container.backups.create()
-        await bot.send_document(
-            container.settings.owner_telegram_id, document=item.storage_path, caption=item.file_name
-        )
+        if owner_telegram_id is None:
+            raise RuntimeError("OWNER_TELEGRAM_ID is not configured.")
+        await bot.send_document(owner_telegram_id, document=item.storage_path, caption=item.file_name)
         return item.file_name
 
     scheduler.add_job(
@@ -86,12 +87,13 @@ def build_scheduler(container: Container, bot: Bot) -> AsyncIOScheduler:
         coalesce=True,
         replace_existing=True,
     )
-    scheduler.add_job(
-        _guard("backup", backup),
-        CronTrigger(hour=3, minute=0),
-        id="backup",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
+    if owner_telegram_id is not None:
+        scheduler.add_job(
+            _guard("backup", backup),
+            CronTrigger(hour=3, minute=0),
+            id="backup",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
     return scheduler

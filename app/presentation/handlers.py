@@ -2,17 +2,25 @@ from __future__ import annotations
 
 from contextlib import suppress
 from datetime import UTC, datetime
+from html import escape
 
 from aiogram import F, Router
-from aiogram.enums import ContentType, ParseMode
-from aiogram.filters import CommandStart
+from aiogram.enums import ChatType, ContentType, ParseMode
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, LabeledPrice, Message, PreCheckoutQuery
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    LabeledPrice,
+    Message,
+    PreCheckoutQuery,
+)
 
 from app.application.dto import Page
 from app.bootstrap import Container
 from app.domain.enums import Screen
 from app.domain.errors import DomainError, ValidationError
+from app.presentation.keyboards import keyboard
 from app.presentation.rendering import ScreenRenderer, ScreenView
 from app.presentation.states import InputState
 
@@ -154,35 +162,115 @@ async def _send_invoice(message: Message, invoice: object) -> None:
     )
 
 
+def _profile_keyboard(has_primary: bool) -> InlineKeyboardMarkup:
+    action = "Сменить основной номер" if has_primary else "Выбрать основной номер"
+    return keyboard([[(action, "profile:choose")]])
+
+
+async def _profile_text(container: Container, telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    user, plate = await container.marketplace.profile(telegram_id)
+    if plate is None:
+        number = "не выбран"
+    else:
+        number = f"<code>{escape(plate.plate_number)}</code> · {plate.country_code}"
+    cover = "установлена" if user.cover_photo_file_id else "не установлена"
+    return (
+        "<b>Ваш номер</b>\n\n"
+        f"Основной номер: {number}\n"
+        f"Обложка: {cover}\n\n"
+        "Выберите один из доступных номеров. Чтобы сменить обложку, просто отправьте фото сюда.",
+        _profile_keyboard(plate is not None),
+    )
+
+
+async def _send_profile(message: Message, container: Container) -> None:
+    text, markup = await _profile_text(container, message.from_user.id)
+    await message.answer(text, reply_markup=markup)
+
+
 @router.message(CommandStart())
+@router.message(Command("profile"))
 async def start(message: Message, container: Container) -> None:
     if message.from_user is None:
         return
-    renderer = _renderer(container)
-    await container.navigation.home(message.from_user.id)
-    view = await renderer.home(message.from_user.id)
-    user = await container.marketplace.get_user(message.from_user.id)
-    if user.app_chat_id == message.chat.id and user.app_message_id is not None:
-        try:
-            await renderer.update_existing(message.bot, message.from_user.id, view)
-            return
-        except Exception:
-            pass
-    if view.image_file_id is None:
-        app_message = await message.answer(view.text, reply_markup=view.markup)
-    else:
-        app_message = await message.answer_photo(
-            view.image_file_id,
-            caption=view.text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=view.markup,
+    if message.chat.type != ChatType.PRIVATE:
+        await message.answer("Напишите «мой номер», и я покажу ваш основной игровой номер.")
+        return
+    await _send_profile(message, container)
+
+
+@router.callback_query(F.data == "profile:show")
+async def profile_show(callback: CallbackQuery, container: Container) -> None:
+    if callback.message is None:
+        return
+    text, markup = await _profile_text(container, callback.from_user.id)
+    await callback.message.edit_text(text, reply_markup=markup)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:choose")
+async def profile_choose(callback: CallbackQuery, container: Container) -> None:
+    if callback.message is None:
+        return
+    plates = await container.marketplace.available_primary_plates(callback.from_user.id)
+    if not plates:
+        await callback.message.edit_text(
+            "<b>Нет доступного номера</b>\n\n"
+            "Основным можно назначить только номер, который принадлежит вам и не выставлен на продажу.",
+            reply_markup=keyboard([[("Назад", "profile:show")]]),
         )
-    await container.marketplace.set_main_message(
-        message.from_user.id,
-        message.chat.id,
-        app_message.message_id,
-        view.image_file_id,
+    else:
+        rows = [[(f"🚘 {plate.plate_number} · {plate.country_code}", f"profile:primary:{plate.id}")]
+                for plate in plates]
+        rows.append([("Назад", "profile:show")])
+        await callback.message.edit_text(
+            "<b>Выберите основной номер</b>\n\nВ групповом чате будет показан только он.",
+            reply_markup=keyboard(rows),
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^profile:primary:\d+$"))
+async def profile_set_primary(callback: CallbackQuery, container: Container) -> None:
+    if callback.message is None:
+        return
+    plate_id = int((callback.data or "").rsplit(":", 1)[-1])
+    try:
+        await container.marketplace.set_primary_plate(callback.from_user.id, plate_id)
+        text, markup = await _profile_text(container, callback.from_user.id)
+        await callback.message.edit_text(text, reply_markup=markup)
+        await callback.answer("Основной номер сохранён.")
+    except DomainError as error:
+        await callback.answer(str(error), show_alert=True)
+
+
+def _owner_plate_text(telegram_id: int, name: str, plate_number: str, country_code: str) -> str:
+    return (
+        "🚘 <b>Номер владельца</b>\n\n"
+        f"<code>{escape(plate_number)}</code>\n"
+        f"🌍 {escape(country_code)}\n"
+        f"👤 <a href=\"tg://user?id={telegram_id}\">{escape(name)}</a>"
     )
+
+
+@router.message(
+    F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}),
+    F.text.func(lambda text: isinstance(text, str) and text.strip().casefold() == "мой номер"),
+)
+async def show_primary_number_in_group(message: Message, container: Container) -> None:
+    if message.from_user is None:
+        return
+    user, plate = await container.marketplace.profile(message.from_user.id)
+    if plate is None:
+        await message.reply(
+            "Основной номер ещё не выбран. Откройте бота в личном чате и нажмите «Выбрать основной номер»."
+        )
+        return
+    text = _owner_plate_text(user.telegram_id, user.telegram_name, plate.plate_number, plate.country_code)
+    if user.cover_photo_file_id:
+        await message.reply_photo(user.cover_photo_file_id, caption=text, parse_mode=ParseMode.HTML)
+    else:
+        await message.reply(text)
 
 
 @router.callback_query(F.data == "nav:home")
@@ -907,13 +995,8 @@ async def admin_card_image(message: Message, state: FSMContext, container: Conta
     data = await state.get_data()
     try:
         photo = (message.photo or [])[-1]
-        image = await container.images.persist_telegram_photo(
-            message.bot,
-            photo.file_id,
-            f"cards/{data['card_id']}",
-        )
         await container.admin.set_card_image(
-            message.from_user.id, str(data["card_id"]), image.reference
+            message.from_user.id, str(data["card_id"]), photo.file_id
         )
         await _cleanup_input(message, state)
         renderer = _renderer(container)
@@ -1014,13 +1097,8 @@ async def admin_banner_image(message: Message, state: FSMContext, container: Con
     data = await state.get_data()
     try:
         photo = (message.photo or [])[-1]
-        image = await container.images.persist_telegram_photo(
-            message.bot,
-            photo.file_id,
-            f"banners/{data['banner_id']}",
-        )
         await container.admin.set_banner_image(
-            message.from_user.id, int(data["banner_id"]), image.reference
+            message.from_user.id, int(data["banner_id"]), photo.file_id
         )
         await _cleanup_input(message, state)
         renderer = _renderer(container)
@@ -1257,6 +1335,15 @@ async def admin_backup(callback: CallbackQuery, container: Container) -> None:
         await callback.answer("Резервная копия создана.")
     except Exception as error:
         await callback.answer(str(error), show_alert=True)
+
+
+@router.message(F.chat.type == ChatType.PRIVATE, F.photo)
+async def save_profile_cover(message: Message, container: Container) -> None:
+    """Telegram's photo file ID is durable enough to use as the user's cover."""
+    if message.from_user is None or not message.photo:
+        return
+    await container.marketplace.set_cover_photo(message.from_user.id, message.photo[-1].file_id)
+    await message.answer("Обложка сохранена. Она будет показана вместе с основным номером в группе.")
 
 
 @router.pre_checkout_query()

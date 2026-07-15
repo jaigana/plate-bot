@@ -43,6 +43,12 @@ class User(TimestampMixin, Base):
     app_chat_id: Mapped[int | None] = mapped_column(BIGINT)
     app_message_id: Mapped[int | None] = mapped_column(BIGINT)
     app_image_file_id: Mapped[str | None] = mapped_column(Text)
+    # Telegram keeps uploaded files; storing its file ID in PostgreSQL is enough
+    # to re-send a cover and avoids a second media storage service.
+    cover_photo_file_id: Mapped[str | None] = mapped_column(Text)
+    primary_plate_id: Mapped[int | None] = mapped_column(
+        ForeignKey("plates.id", ondelete="SET NULL"), index=True
+    )
 
     plates: Mapped[list[Plate]] = relationship(
         back_populates="owner", foreign_keys="Plate.owner_id"
