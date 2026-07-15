@@ -1,9 +1,12 @@
 import asyncio
+import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage
+from redis.exceptions import RedisError
 
 from app.bootstrap import build_container
 from app.config.settings import get_settings
@@ -13,12 +16,26 @@ from app.presentation.webhook import serve_webhook
 from app.tasks.scheduler import build_scheduler
 from app.utils.logging import configure_logging
 
+logger = logging.getLogger(__name__)
+
+
+async def build_storage(redis_url: str) -> RedisStorage | MemoryStorage:
+    """Use Redis when available, without making basic bot replies depend on it."""
+    storage = RedisStorage.from_url(redis_url)
+    try:
+        await storage.redis.ping()
+    except RedisError as error:
+        await storage.close()
+        logger.warning("redis_unavailable_using_memory_storage: %s", error)
+        return MemoryStorage()
+    return storage
+
 
 async def run() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     container = build_container(settings)
-    storage = RedisStorage.from_url(settings.redis_url)
+    storage = await build_storage(settings.redis_url)
     bot = Bot(
         settings.bot_token.get_secret_value(),
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

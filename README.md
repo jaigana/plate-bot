@@ -35,6 +35,12 @@ bare `my-bot.up.railway.app` are accepted. Do not use Railway's private/internal
 address — Telegram cannot call it. Railway provides `PORT` automatically; it is used when
 `WEBHOOK_PORT` is not set. The container applies migrations before starting the bot.
 
+Set `REDIS_URL` from the Redis service's generated connection variable (for example, reference
+its `REDIS_URL` in Railway). Do not enter `redis://redis:6379/0` manually: Railway Redis uses a
+password, so the URL must contain credentials such as `redis://default:<password>@host:port/0`.
+If Redis is temporarily unavailable, the bot now uses in-memory FSM storage and continues to
+answer `/start`; Redis-backed state will resume after its connection variable is corrected.
+
 For the group phrase **«мой номер»** to reach the bot, disable group privacy in BotFather:
 `/setprivacy` → select the bot → `Disable`. Telegram otherwise delivers only commands to bots
 in groups. A user opens the bot privately, selects one owned, non-listed number as primary, and
