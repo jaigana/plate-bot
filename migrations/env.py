@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 from logging.config import fileConfig
 
 import app.infrastructure.db.models  # noqa: F401 - register every mapped table
@@ -15,8 +16,21 @@ if config.config_file_name is not None:
 database_url = os.getenv("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
+database_schema = os.getenv("DATABASE_SCHEMA", "cpm2")
+if not re.fullmatch(r"[a-z_][a-z0-9_]*", database_schema):
+    raise ValueError("DATABASE_SCHEMA must be a lowercase ASCII PostgreSQL identifier")
 
 target_metadata = Base.metadata
+
+
+def prepare_schema(connection: object) -> None:
+    """Create and select the application's private schema before Alembic touches tables."""
+    from sqlalchemy import Connection, text
+
+    assert isinstance(connection, Connection)
+    quoted_schema = f'"{database_schema}"'
+    connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {quoted_schema}"))
+    connection.execute(text(f"SET search_path TO {quoted_schema}"))
 
 
 def run_migrations_offline() -> None:
@@ -27,6 +41,8 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
     )
     with context.begin_transaction():
+        context.execute(f'CREATE SCHEMA IF NOT EXISTS "{database_schema}"')
+        context.execute(f'SET search_path TO "{database_schema}"')
         context.run_migrations()
 
 
@@ -42,6 +58,7 @@ async def run_migrations_online() -> None:
         configuration, prefix="sqlalchemy.", poolclass=pool.NullPool
     )
     async with connectable.connect() as connection:
+        await connection.run_sync(prepare_schema)
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()
 

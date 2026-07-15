@@ -20,6 +20,8 @@ For a local Python environment, install `pip install -e '.[dev]'`, start Postgre
 - Run exactly one scheduler instance (`SCHEDULER_ENABLED=true`, the default) when horizontally scaling polling workers.
 - Use Telegram webhook mode behind HTTPS for Railway or other multi-instance deployments.
 - PostgreSQL is the source of truth. Redis is used only for FSM and UI cache, so losing Redis does not alter balances or asset ownership.
+- All CPM2 tables live in the `cpm2` PostgreSQL schema by default. This prevents collisions with
+  generic tables such as `users` in a shared database; override it only through `DATABASE_SCHEMA`.
 - Backups use `pg_dump`; the process image includes the PostgreSQL client.
 
 ## Architecture

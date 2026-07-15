@@ -19,6 +19,7 @@ def test_empty_webhook_environment_values_select_polling_mode() -> None:
 
     assert settings.webhook_url is None
     assert settings.webhook_secret is None
+    assert settings.database_schema == "cpm2"
     assert settings.async_database_url == "postgresql+asyncpg://user:password@localhost:5432/plates"
 
 
@@ -37,3 +38,7 @@ def test_webhook_requires_https_and_a_safe_secret() -> None:
         _settings(webhook_url="http://bot.example.com")
     with pytest.raises(PydanticValidationError):
         _settings(webhook_url="https://bot.example.com", webhook_secret="contains space")
+    with pytest.raises(PydanticValidationError):
+        _settings(database_schema="cpm2-prod")
+    with pytest.raises(PydanticValidationError):
+        _settings(database_schema="CPM2")

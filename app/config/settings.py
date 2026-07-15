@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     bot_token: SecretStr
     database_url: str
+    database_schema: str = "cpm2"
     redis_url: str
     admin_telegram_ids: frozenset[int] = Field(default_factory=frozenset)
     owner_telegram_id: int
@@ -33,6 +34,13 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return frozenset(int(item.strip()) for item in value.split(",") if item.strip())
         return frozenset(value)
+
+    @field_validator("database_schema")
+    @classmethod
+    def validate_database_schema(cls, value: str) -> str:
+        if not value or not value.isidentifier() or not value.isascii() or value != value.lower():
+            raise ValueError("DATABASE_SCHEMA must be a lowercase ASCII PostgreSQL identifier")
+        return value
 
     @field_validator("webhook_url", "webhook_secret", mode="before")
     @classmethod

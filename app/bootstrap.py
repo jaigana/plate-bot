@@ -28,7 +28,7 @@ class Container:
 
 
 def build_container(settings: Settings) -> Container:
-    database = Database(settings.async_database_url)
+    database = Database(settings.async_database_url, schema=settings.database_schema)
     uow = UnitOfWork(database.session_factory)
     auctions = AuctionService(uow)
     return Container(

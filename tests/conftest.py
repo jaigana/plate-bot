@@ -4,6 +4,7 @@ import app.infrastructure.db.models  # noqa: F401 - register all SQLAlchemy tabl
 import pytest
 from app.infrastructure.db.base import Base
 from app.infrastructure.db.session import Database, UnitOfWork
+from sqlalchemy import text
 
 
 def _async_url(url: str) -> str:
@@ -19,6 +20,7 @@ async def postgres_uow() -> UnitOfWork:
         pytest.skip("TEST_DATABASE_URL is not configured")
     database = Database(_async_url(url))
     async with database.engine.begin() as connection:
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS cpm2"))
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     try:

@@ -5,8 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 
 class Database:
-    def __init__(self, url: str) -> None:
-        self.engine = create_async_engine(url, pool_pre_ping=True, pool_size=20, max_overflow=40)
+    def __init__(self, url: str, *, schema: str = "cpm2") -> None:
+        self.engine = create_async_engine(
+            url,
+            pool_pre_ping=True,
+            pool_size=20,
+            max_overflow=40,
+            connect_args={"server_settings": {"search_path": schema}},
+        )
         self.session_factory = async_sessionmaker(
             self.engine, expire_on_commit=False, autoflush=False
         )
